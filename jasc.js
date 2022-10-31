@@ -4,6 +4,11 @@ const es = require('esprima');
 const esc = require('escope');
 const process = require('process');
 
+// REMINDER
+//   new {}.constructor.constructor("alert('evil!')")()
+// from
+//   https://stackoverflow.com/questions/48748584/esprima-detect-global-scope-access
+
 function main() {
 
   let jsPath = process.argv[2];
@@ -29,7 +34,6 @@ function main() {
     let msg = '';
     msg += 'JASC violation'
     msg += ` in ${srcPath} at ${loc.start.line}:${loc.start.column} thru ${loc.end.line}:${loc.end.column}\n`;
-    msg += `  ${reason}\n`;
 
     const srcLines = srcText.split('\n');
     for (let lineno = loc.start.line - 2; lineno <= loc.end.line + 2; lineno++) {
@@ -46,6 +50,7 @@ function main() {
       msg += `  ${prefix} ${linenoPretty} | ` + line + '\n';
     }
 
+    msg += `  ${reason}\n`;
     return msg;
   }
 }
@@ -54,26 +59,22 @@ function main() {
 // Take an esprima AST node and produce an array of violations
 function * check(root, scopes) {
 
-  const disallowances = [
-
-    // num++
-    (node => node.type == 'UpdateExpression' && `Mutation is disallowed (${node.operator} operator)`),
-
+  const simpleRules = [
     // delete obj[attr]
-    (node => node.type === 'UnaryExpression' && node.operator === 'delete' && 'Mutation is disallowed (delete operator)'),
-
-    // obj.attr = val
-    // (obj = val is fine)
-    (node  => node.type === 'AssignmentExpression'
-           && node.left.type === 'MemberExpression'
-           && `The left-hand side of an assignment may not be a property access`
+    (node => node.type === 'UnaryExpression'
+          && node.operator === 'delete'
+          && 'The delete operator is forbidden (to prevent object mutation)'
     ),
-
+    // obj.attr = val
+    (node => node.type === 'AssignmentExpression'
+          && node.left.type === 'MemberExpression'
+          && `The left-hand side of an assignment may not be a property access (to prevent object mutation)`
+    ),
   ];
 
   // Apply simple rules
   for (const node of traverse(root)) {
-    for (const f of disallowances) {
+    for (const f of simpleRules) {
       const err = f(node);
       if (err) yield {
         loc: node.loc,
@@ -90,7 +91,7 @@ function * check(root, scopes) {
       if (!ref.resolved) {
         yield {
           loc: ref.identifier.loc,
-          reason: `Reference to undeclared variable '${ref.identifier.name}' is disallowed`,
+          reason: `Reference to undeclared variable '${ref.identifier.name}' is forbidden`,
         };
       }
     }
