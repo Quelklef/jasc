@@ -4,11 +4,6 @@ const es = require('esprima');
 const esc = require('escope');
 const process = require('process');
 
-// REMINDER
-//   new {}.constructor.constructor("alert('evil!')")()
-// from
-//   https://stackoverflow.com/questions/48748584/esprima-detect-global-scope-access
-
 function main() {
 
   // Parse CLI args
